@@ -368,7 +368,7 @@ public static abstract class UntypedExpr implements Expr{
 }
 
 interface IParser{
-	Expr parse(C context, Object form) ;
+	Expr parse(C context, Compiler.ObjExpr objx, Object form) ;
 }
 
 static boolean isSpecial(Object sym){
@@ -512,7 +512,7 @@ static class DefExpr implements Expr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object form) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object form) {
 			//(def x) or (def x initexpr) or (def x "docstring" initexpr)
 			String docstring = null;
 			if(RT.count(form) == 4 && (RT.third(form) instanceof String)) {
@@ -574,9 +574,9 @@ static class DefExpr implements Expr{
 //					.without(Keyword.intern(null, "added"))
 //					.without(Keyword.intern(null, "static"));
             mm = (IPersistentMap) elideMeta(mm);
-			Expr meta = mm.count()==0 ? null:analyze(context == C.EVAL ? context : C.EXPRESSION, mm);
+			Expr meta = mm.count()==0 ? null:analyze(context == C.EVAL ? context : C.EXPRESSION, objx, mm);
 			return new DefExpr((String) SOURCE.deref(), lineDeref(), columnDeref(),
-			                   v, analyze(context == C.EVAL ? context : C.EXPRESSION, RT.third(form), v.sym.name),
+			                   v, analyze(context == C.EVAL ? context : C.EXPRESSION, objx, RT.third(form), v.sym.name),
 			                   meta, RT.count(form) == 3, isDynamic);
 		}
 	}
@@ -608,14 +608,14 @@ public static class AssignExpr implements Expr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			ISeq form = (ISeq) frm;
 			if(RT.length(form) != 3)
 				throw new IllegalArgumentException("Malformed assignment, expecting (set! target val)");
-			Expr target = analyze(C.EXPRESSION, RT.second(form));
+			Expr target = analyze(C.EXPRESSION, objx, RT.second(form));
 			if(!(target instanceof AssignableExpr))
 				throw new IllegalArgumentException("Invalid assignment target");
-			return new AssignExpr((AssignableExpr) target, analyze(C.EXPRESSION, RT.third(form)));
+			return new AssignExpr((AssignableExpr) target, analyze(C.EXPRESSION, objx, RT.third(form)));
 		}
 	}
 }
@@ -695,7 +695,7 @@ public static class TheVarExpr implements Expr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object form) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object form) {
 			Symbol sym = (Symbol) RT.second(form);
 			Var v = lookupVar(sym, false);
 			if(v != null)
@@ -772,7 +772,7 @@ public static class ImportExpr implements Expr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object form) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object form) {
 			return new ImportExpr((String) RT.second(form));
 		}
 	}
@@ -949,7 +949,7 @@ static public abstract class HostExpr implements Expr, MaybePrimitiveExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			ISeq form = (ISeq) frm;
 			//(. x fieldname-sym) or
 			//(. x 0-ary-method)
@@ -966,7 +966,7 @@ static public abstract class HostExpr implements Expr, MaybePrimitiveExpr{
 			//at this point c will be non-null if static
 			Expr instance = null;
 			if(c == null)
-				instance = analyze(context == C.EVAL ? context : C.EXPRESSION, RT.second(form));
+				instance = analyze(context == C.EVAL ? context : C.EXPRESSION, objx, RT.second(form));
 
 			boolean maybeField = RT.length(form) == 3 && (RT.third(form) instanceof Symbol);
 
@@ -1000,7 +1000,7 @@ static public abstract class HostExpr implements Expr, MaybePrimitiveExpr{
 				PersistentVector args = PersistentVector.EMPTY;
 				boolean tailPosition = inTailCall(context);
 				for(ISeq s = RT.next(call); s != null; s = s.next())
-					args = args.cons(analyze(context == C.EVAL ? context : C.EXPRESSION, s.first()));
+					args = args.cons(analyze(context == C.EVAL ? context : C.EXPRESSION, objx, s.first()));
 				if(c != null)
 					return new StaticMethodExpr(source, line, column, tag, c, munge(sym.name), args, tailPosition);
 				else
@@ -1992,7 +1992,7 @@ static class ConstantExpr extends LiteralExpr{
 	static class Parser implements IParser{
 		static Keyword formKey = Keyword.intern("form");
 
-		public Expr parse(C context, Object form){
+		public Expr parse(C context, Compiler.ObjExpr objx, Object form){
 			int argCount = RT.count(form) - 1;
 			if(argCount != 1){
 				IPersistentMap exData = new PersistentArrayMap(new Object[]{formKey, form});
@@ -2124,8 +2124,8 @@ static class MonitorEnterExpr extends UntypedExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object form) {
-			return new MonitorEnterExpr(analyze(C.EXPRESSION, RT.second(form)));
+		public Expr parse(C context, Compiler.ObjExpr objx, Object form) {
+			return new MonitorEnterExpr(analyze(C.EXPRESSION, objx, RT.second(form)));
 		}
 	}
 }
@@ -2148,8 +2148,8 @@ static class MonitorExitExpr extends UntypedExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object form) {
-			return new MonitorExitExpr(analyze(C.EXPRESSION, RT.second(form)));
+		public Expr parse(C context, Compiler.ObjExpr objx, Object form) {
+			return new MonitorExitExpr(analyze(C.EXPRESSION, objx, RT.second(form)));
 		}
 	}
 
@@ -2273,11 +2273,11 @@ public static class TryExpr implements Expr{
 
 	static class Parser implements IParser{
 
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			ISeq form = (ISeq) frm;
 //			if(context == C.EVAL || context == C.EXPRESSION)
 			if(context != C.RETURN)
-				return analyze(context, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
+				return analyze(context, objx, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
 
 			//(try try-expr* catch-expr* finally-expr?)
 			//catch-expr: (catch class sym expr*)
@@ -2306,7 +2306,7 @@ public static class TryExpr implements Expr{
 					if(bodyExpr == null)
 						try {
 							Var.pushThreadBindings(RT.map(NO_RECUR, true, METHOD_RETURN_CONTEXT, null));
-							bodyExpr = (new BodyExpr.Parser()).parse(context, RT.seq(body));
+							bodyExpr = (new BodyExpr.Parser()).parse(context, objx, RT.seq(body));
 						} finally {
 							Var.popThreadBindings();
 						}
@@ -2333,7 +2333,7 @@ public static class TryExpr implements Expr{
 							                                (Symbol) (RT.second(f) instanceof Symbol ? RT.second(f)
 							                                                                         : null),
 							                                null,false);
-							Expr handler = (new BodyExpr.Parser()).parse(C.EXPRESSION, RT.next(RT.next(RT.next(f))));
+							Expr handler = (new BodyExpr.Parser()).parse(C.EXPRESSION, objx, RT.next(RT.next(RT.next(f))));
 							catches = catches.cons(new CatchClause(c, lb, handler));
 							}
 						finally
@@ -2349,7 +2349,7 @@ public static class TryExpr implements Expr{
 						try
 							{
 							Var.pushThreadBindings(RT.map(IN_CATCH_FINALLY, RT.T));
-							finallyExpr = (new BodyExpr.Parser()).parse(C.STATEMENT, RT.next(f));
+							finallyExpr = (new BodyExpr.Parser()).parse(C.STATEMENT, objx, RT.next(f));
 							}
 						finally
 							{
@@ -2365,7 +2365,7 @@ public static class TryExpr implements Expr{
 				try
 					{
 					Var.pushThreadBindings(RT.map(NO_RECUR, true));
-					bodyExpr = (new BodyExpr.Parser()).parse(context, RT.seq(body));
+					bodyExpr = (new BodyExpr.Parser()).parse(context, objx, RT.seq(body));
 					}
 				finally
 					{
@@ -2456,14 +2456,14 @@ static class ThrowExpr extends UntypedExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object form) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object form) {
 			if(context == C.EVAL)
-				return analyze(context, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
+				return analyze(context, objx, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
 			else if(RT.count(form) == 1)
 				throw Util.runtimeException("Too few arguments to throw, throw expects a single Throwable instance");
 			else if(RT.count(form) > 2)
 				throw Util.runtimeException("Too many arguments to throw, throw expects a single Throwable instance");
-			return new ThrowExpr(analyze(C.EXPRESSION, RT.second(form)));
+			return new ThrowExpr(analyze(C.EXPRESSION, objx, RT.second(form)));
 		}
 	}
 }
@@ -2646,7 +2646,7 @@ public static class NewExpr implements Expr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			int line = lineDeref();
 			int column = columnDeref();
 			ISeq form = (ISeq) frm;
@@ -2658,7 +2658,7 @@ public static class NewExpr implements Expr{
 				throw new IllegalArgumentException("Unable to resolve classname: " + RT.second(form));
 			PersistentVector args = PersistentVector.EMPTY;
 			for(ISeq s = RT.next(RT.next(form)); s != null; s = s.next())
-				args = args.cons(analyze(context == C.EVAL ? context : C.EXPRESSION, s.first()));
+				args = args.cons(analyze(context == C.EVAL ? context : C.EXPRESSION, objx, s.first()));
 			return new NewExpr(c, args, line, column);
 		}
 	}
@@ -2808,7 +2808,7 @@ public static class IfExpr implements Expr, MaybePrimitiveExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			ISeq form = (ISeq) frm;
 			//(if test then) or (if test then else)
 			if(form.count() > 4)
@@ -2816,12 +2816,12 @@ public static class IfExpr implements Expr, MaybePrimitiveExpr{
 			else if(form.count() < 3)
 				throw Util.runtimeException("Too few arguments to if");
             PathNode branch = new PathNode(PATHTYPE.BRANCH, (PathNode) CLEAR_PATH.get());
-            Expr testexpr = analyze(context == C.EVAL ? context : C.EXPRESSION, RT.second(form));
+            Expr testexpr = analyze(context == C.EVAL ? context : C.EXPRESSION, objx, RT.second(form));
             Expr thenexpr, elseexpr;
             try {
                 Var.pushThreadBindings(
                         RT.map(CLEAR_PATH, new PathNode(PATHTYPE.PATH,branch)));
-                thenexpr = analyze(context, RT.third(form));
+                thenexpr = analyze(context, objx, RT.third(form));
                 }
             finally{
                 Var.popThreadBindings();
@@ -2829,7 +2829,7 @@ public static class IfExpr implements Expr, MaybePrimitiveExpr{
             try {
                 Var.pushThreadBindings(
                         RT.map(CLEAR_PATH, new PathNode(PATHTYPE.PATH,branch)));
-                elseexpr = analyze(context, RT.fourth(form));
+                elseexpr = analyze(context, objx, RT.fourth(form));
                 }
             finally{
                 Var.popThreadBindings();
@@ -3086,7 +3086,7 @@ public static class MapExpr implements Expr{
 	}
 
 
-	static public Expr parse(C context, IPersistentMap form) {
+	static public Expr parse(C context, Compiler.ObjExpr objx, IPersistentMap form) {
 		IPersistentVector keyvals = PersistentVector.EMPTY;
 		boolean keysConstant = true;
 		boolean valsConstant = true;
@@ -3095,8 +3095,8 @@ public static class MapExpr implements Expr{
 		for(ISeq s = RT.seq(form); s != null; s = s.next())
 			{
 			IMapEntry e = (IMapEntry) s.first();
-			Expr k = analyze(context == C.EVAL ? context : C.EXPRESSION, e.key());
-			Expr v = analyze(context == C.EVAL ? context : C.EXPRESSION, e.val());
+			Expr k = analyze(context == C.EVAL ? context : C.EXPRESSION, objx, e.key());
+			Expr v = analyze(context == C.EVAL ? context : C.EXPRESSION, objx, e.val());
 			keyvals = (IPersistentVector) keyvals.cons(k);
 			keyvals = (IPersistentVector) keyvals.cons(v);
 			if(k instanceof LiteralExpr)
@@ -3116,7 +3116,7 @@ public static class MapExpr implements Expr{
 		Expr ret = new MapExpr(keyvals);
 		if(form instanceof IObj && ((IObj) form).meta() != null)
 			return new MetaExpr(ret, MapExpr
-					.parse(context == C.EVAL ? context : C.EXPRESSION, ((IObj) form).meta()));
+					.parse(context == C.EVAL ? context : C.EXPRESSION, objx, ((IObj) form).meta()));
 		else if(keysConstant)
 			{
 			// TBD: Add more detail to exception thrown below.
@@ -3172,14 +3172,14 @@ public static class SetExpr implements Expr{
 	}
 
 
-	static public Expr parse(C context, IPersistentSet form) {
+	static public Expr parse(C context, Compiler.ObjExpr objx, IPersistentSet form) {
 		IPersistentVector keys = PersistentVector.EMPTY;
 		boolean constant = true;
 
 		for(ISeq s = RT.seq(form); s != null; s = s.next())
 			{
 			Object e = s.first();
-			Expr expr = analyze(context == C.EVAL ? context : C.EXPRESSION, e);
+			Expr expr = analyze(context == C.EVAL ? context : C.EXPRESSION, objx, e);
 			keys = (IPersistentVector) keys.cons(expr);
 			if(!(expr instanceof LiteralExpr))
 				constant = false;
@@ -3187,7 +3187,7 @@ public static class SetExpr implements Expr{
 		Expr ret = new SetExpr(keys);
 		if(form instanceof IObj && ((IObj) form).meta() != null)
 			return new MetaExpr(ret, MapExpr
-					.parse(context == C.EVAL ? context : C.EXPRESSION, ((IObj) form).meta()));
+					.parse(context == C.EVAL ? context : C.EXPRESSION, objx, ((IObj) form).meta()));
 		else if(constant)
 			{
 			IPersistentSet set = PersistentHashSet.EMPTY;
@@ -3246,13 +3246,13 @@ public static class VectorExpr implements Expr{
 		return IPersistentVector.class;
 	}
 
-	static public Expr parse(C context, IPersistentVector form) {
+	static public Expr parse(C context, Compiler.ObjExpr objx, IPersistentVector form) {
 		boolean constant = true;
 
 		IPersistentVector args = PersistentVector.EMPTY;
 		for(int i = 0; i < form.count(); i++)
 			{
-			Expr v = analyze(context == C.EVAL ? context : C.EXPRESSION, form.nth(i));
+			Expr v = analyze(context == C.EVAL ? context : C.EXPRESSION, objx, form.nth(i));
 			args = (IPersistentVector) args.cons(v);
 			if(!(v instanceof LiteralExpr))
 				constant = false;
@@ -3260,7 +3260,7 @@ public static class VectorExpr implements Expr{
 		Expr ret = new VectorExpr(args);
 		if(form instanceof IObj && ((IObj) form).meta() != null)
 			return new MetaExpr(ret, MapExpr
-					.parse(context == C.EVAL ? context : C.EXPRESSION, ((IObj) form).meta()));
+					.parse(context == C.EVAL ? context : C.EXPRESSION, objx, ((IObj) form).meta()));
 		else if (constant)
 			{
 			IPersistentVector rv = PersistentVector.EMPTY;
@@ -3545,7 +3545,7 @@ static class StaticInvokeExpr implements Expr, MaybePrimitiveExpr{
 		return Type.getType(retClass);
 	}
 
-	public static Expr parse(Var v, ISeq args, Object tag, boolean tailPosition) {
+	public static Expr parse(Compiler.ObjExpr objx, Var v, ISeq args, Object tag, boolean tailPosition) {
 		if(!v.isBound() || v.get() == null)
 			{
 //			System.out.println("Not bound: " + v);
@@ -3599,7 +3599,7 @@ static class StaticInvokeExpr implements Expr, MaybePrimitiveExpr{
 
 		PersistentVector argv = PersistentVector.EMPTY;
 		for(ISeq s = RT.seq(args); s != null; s = s.next())
-			argv = argv.cons(analyze(C.EXPRESSION, s.first()));
+			argv = argv.cons(analyze(C.EXPRESSION, objx, s.first()));
 
 		return new StaticInvokeExpr(target,retClass,paramClasses, paramTypes,variadic, argv, tag, tailPosition);
 	}
@@ -3808,20 +3808,20 @@ static class InvokeExpr implements Expr{
         return jc;
 	}
 
-	static public Expr parse(C context, ISeq form) {
+	static public Expr parse(C context, Compiler.ObjExpr objx, ISeq form) {
 		boolean tailPosition = inTailCall(context);
 		if(context != C.EVAL)
 			context = C.EXPRESSION;
-		Expr fexpr = analyze(context, form.first());
+		Expr fexpr = analyze(context, objx, form.first());
 		if(fexpr instanceof VarExpr && ((VarExpr)fexpr).var.equals(INSTANCE) && RT.count(form) == 3)
 			{
-			Expr sexpr = analyze(C.EXPRESSION, RT.second(form));
+			Expr sexpr = analyze(C.EXPRESSION, objx, RT.second(form));
 			if(sexpr instanceof ConstantExpr)
 				{
 				Object val = ((ConstantExpr) sexpr).val();
 				if(val instanceof Class)
 					{
-					return new InstanceOfExpr((Class) val, analyze(context, RT.third(form)));
+					return new InstanceOfExpr((Class) val, analyze(context, objx, RT.third(form)));
 					}
 				}
 			}
@@ -3839,7 +3839,7 @@ static class InvokeExpr implements Expr{
                 Object sigtag = sigTag(arity, v);
                 Object vtag = RT.get(RT.meta(v), RT.TAG_KEY);
                 Expr ret = StaticInvokeExpr
-                        .parse(v, RT.next(form), formtag != null ? formtag : sigtag != null ? sigtag : vtag, tailPosition);
+                        .parse(objx, v, RT.next(form), formtag != null ? formtag : sigtag != null ? sigtag : vtag, tailPosition);
                 if(ret != null)
                     {
 //				    System.out.println("invoke direct: " + v);
@@ -3862,7 +3862,8 @@ static class InvokeExpr implements Expr{
 					String primc = FnMethod.primInterface(args);
 					if(primc != null)
 						return analyze(context,
-						               ((IObj)RT.listStar(Symbol.intern(".invokePrim"),
+						               objx,
+                           ((IObj)RT.listStar(Symbol.intern(".invokePrim"),
 						                                  ((Symbol) form.first()).withMeta(RT.map(RT.TAG_KEY, Symbol.intern(primc))),
 						                                  form.next())).withMeta((IPersistentMap)RT.conj(RT.meta(v), RT.meta(form))));
 					break;
@@ -3873,14 +3874,14 @@ static class InvokeExpr implements Expr{
 		if(fexpr instanceof KeywordExpr && RT.count(form) == 2 && KEYWORD_CALLSITES.isBound())
 			{
 //			fexpr = new ConstantExpr(new KeywordCallSite(((KeywordExpr)fexpr).k));
-			Expr target = analyze(context, RT.second(form));
+			Expr target = analyze(context, objx, RT.second(form));
 			return new KeywordInvokeExpr((String) SOURCE.deref(), lineDeref(), columnDeref(), tagOf(form),
 			                             (KeywordExpr) fexpr, target);
 			}
 		PersistentVector args = PersistentVector.EMPTY;
 		for(ISeq s = RT.seq(form.next()); s != null; s = s.next())
 			{
-			args = args.cons(analyze(context, s.first()));
+			args = args.cons(analyze(context, objx, s.first()));
 			}
 //		if(args.count() > MAX_POSITIONAL_ARITY)
 //			throw new IllegalArgumentException(
@@ -3953,7 +3954,7 @@ static public class FnExpr extends ObjExpr{
 			}
 	}
 
-	static Expr parse(C context, ISeq form, String name) {
+	static Expr parse(C context, Compiler.ObjExpr objx, ISeq form, String name) {
 		ISeq origForm = form;
 		FnExpr fn = new FnExpr(tagOf(form));
 		Keyword retkey = Keyword.intern(null, "rettag");
@@ -4114,7 +4115,7 @@ static public class FnExpr extends ObjExpr{
 			{
 			//System.err.println(name + " supports meta");
 			return new MetaExpr(fn, MapExpr
-					.parse(context == C.EVAL ? context : C.EXPRESSION, fmeta));
+					.parse(context == C.EVAL ? context : C.EXPRESSION, objx, fmeta));
 			}
 		else
 			return fn;
@@ -5459,7 +5460,7 @@ public static class FnMethod extends ObjMethod{
 						getAndIncLocalNum();
 					}
 				}
-			method.body = (new BodyExpr.Parser()).parse(C.RETURN, body);
+			method.body = (new BodyExpr.Parser()).parse(C.RETURN, objx, body);
 			return method;
 			}
 		finally
@@ -6106,7 +6107,7 @@ public static class BodyExpr implements Expr, MaybePrimitiveExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frms) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frms) {
 			ISeq forms = (ISeq) frms;
 			if(Util.equals(RT.first(forms), DO))
 				forms = RT.next(forms);
@@ -6115,9 +6116,9 @@ public static class BodyExpr implements Expr, MaybePrimitiveExpr{
 				{
 				Expr e = (context != C.EVAL &&
 				          (context == C.STATEMENT || forms.next() != null)) ?
-				         analyze(C.STATEMENT, forms.first())
+				         analyze(C.STATEMENT, objx, forms.first())
 				                                                            :
-				         analyze(context, forms.first());
+				         analyze(context, objx, forms.first());
 				exprs = exprs.cons(e);
 				}
 			if(exprs.count() == 0)
@@ -6201,7 +6202,7 @@ public static class LetFnExpr implements Expr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			ISeq form = (ISeq) frm;
 			//(letfns* [var (fn [args] body) ...] body...)
 			if(!(RT.second(form) instanceof IPersistentVector))
@@ -6214,7 +6215,7 @@ public static class LetFnExpr implements Expr{
 			ISeq body = RT.next(RT.next(form));
 
 			if(context == C.EVAL)
-				return analyze(context, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
+				return analyze(context, objx, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
 
 			IPersistentMap dynamicBindings = RT.map(LOCAL_ENV, LOCAL_ENV.deref(),
 			                                        NEXT_LOCAL_NUM, NEXT_LOCAL_NUM.deref());
@@ -6241,13 +6242,13 @@ public static class LetFnExpr implements Expr{
 				for(int i = 0; i < bindings.count(); i += 2)
 					{
 					Symbol sym = (Symbol) bindings.nth(i);
-					Expr init = analyze(C.EXPRESSION, bindings.nth(i + 1), sym.name);
+					Expr init = analyze(C.EXPRESSION, objx, bindings.nth(i + 1), sym.name);
 					LocalBinding lb = (LocalBinding) lbs.nth(i / 2);
 					lb.init = init;
 					BindingInit bi = new BindingInit(lb, init);
 					bindingInits = bindingInits.cons(bi);
 					}
-				return new LetFnExpr(bindingInits, (new BodyExpr.Parser()).parse(context, body));
+				return new LetFnExpr(bindingInits, (new BodyExpr.Parser()).parse(context, objx, body));
 				}
 			finally
 				{
@@ -6328,7 +6329,7 @@ public static class LetExpr implements Expr, MaybePrimitiveExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			ISeq form = (ISeq) frm;
 			//(let [var val var2 val2 ...] body...)
 			boolean isLoop = RT.first(form).equals(LOOP);
@@ -6343,7 +6344,7 @@ public static class LetExpr implements Expr, MaybePrimitiveExpr{
 
 			if(context == C.EVAL
 			   || (context == C.EXPRESSION && isLoop))
-				return analyze(context, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
+				return analyze(context, objx, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
 
 			ObjMethod method = (ObjMethod) METHOD.deref();
 			IPersistentMap backupMethodLocals = method.locals;
@@ -6381,7 +6382,7 @@ public static class LetExpr implements Expr, MaybePrimitiveExpr{
 						Symbol sym = (Symbol) bindings.nth(i);
 						if(sym.getNamespace() != null)
 							throw Util.runtimeException("Can't let qualified name: " + sym);
-						Expr init = analyze(C.EXPRESSION, bindings.nth(i + 1), sym.name);
+						Expr init = analyze(C.EXPRESSION, objx, bindings.nth(i + 1), sym.name);
 						if(isLoop)
 							{
 							if(recurMismatches != null && RT.booleanCast(recurMismatches.nth(i/2)))
@@ -6433,7 +6434,7 @@ public static class LetExpr implements Expr, MaybePrimitiveExpr{
                                        METHOD_RETURN_CONTEXT, methodReturnContext));
                                                        
 							}
-						bodyExpr = (new BodyExpr.Parser()).parse(isLoop ? C.RETURN : context, body);
+						bodyExpr = (new BodyExpr.Parser()).parse(isLoop ? C.RETURN : context, objx, body);
 						}
 					finally{
 						if(isLoop)
@@ -6651,7 +6652,7 @@ public static class RecurExpr implements Expr, MaybePrimitiveExpr{
 	}
 
 	static class Parser implements IParser{
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			int line = lineDeref();
 			int column = columnDeref();
 			String source = (String) SOURCE.deref();
@@ -6665,7 +6666,7 @@ public static class RecurExpr implements Expr, MaybePrimitiveExpr{
 			PersistentVector args = PersistentVector.EMPTY;
 			for(ISeq s = RT.seq(form.next()); s != null; s = s.next())
 				{
-				args = args.cons(analyze(C.EXPRESSION, s.first()));
+				args = args.cons(analyze(C.EXPRESSION, objx, s.first()));
 				}
 			if(args.count() != loopLocals.count())
 				throw new IllegalArgumentException(
@@ -6741,11 +6742,11 @@ private static int getAndIncLocalNum(){
 	return num;
 }
 
-public static Expr analyze(C context, Object form) {
-	return analyze(context, form, null);
+public static Expr analyze(C context, Compiler.ObjExpr objx, Object form) {
+	return analyze(context, objx, form, null);
 }
 
-private static Expr analyze(C context, Object form, String name) {
+private static Expr analyze(C context, Compiler.ObjExpr objx, Object form, String name) {
 	//todo symbol macro expansion?
 	try
 		{
@@ -6765,7 +6766,7 @@ private static Expr analyze(C context, Object form, String name) {
 				return FALSE_EXPR;
 		Class fclass = form.getClass();
 		if(fclass == Symbol.class)
-			return analyzeSymbol((Symbol) form);
+			return analyzeSymbol(objx, (Symbol) form);
 		else if(fclass == Keyword.class)
 			return registerKeyword((Keyword) form);
 		else if(form instanceof Number)
@@ -6782,21 +6783,21 @@ private static Expr analyze(C context, Object form, String name) {
 				Expr ret = new EmptyExpr(form);
 				if(RT.meta(form) != null)
 					ret = new MetaExpr(ret, MapExpr
-							.parse(context == C.EVAL ? context : C.EXPRESSION, ((IObj) form).meta()));
+							.parse(context == C.EVAL ? context : C.EXPRESSION, objx, ((IObj) form).meta()));
 				return ret;
 				}
 		else if(form instanceof ISeq)
-				return analyzeSeq(context, (ISeq) form, name);
+				return analyzeSeq(context, objx, (ISeq) form, name);
 		else if(form instanceof IPersistentVector)
-				return VectorExpr.parse(context, (IPersistentVector) form);
+				return VectorExpr.parse(context, objx, (IPersistentVector) form);
 		else if(form instanceof IRecord)
 				return new ConstantExpr(form);
 		else if(form instanceof IType)
 				return new ConstantExpr(form);
 		else if(form instanceof IPersistentMap)
-				return MapExpr.parse(context, (IPersistentMap) form);
+				return MapExpr.parse(context, objx, (IPersistentMap) form);
 		else if(form instanceof IPersistentSet)
-				return SetExpr.parse(context, (IPersistentSet) form);
+				return SetExpr.parse(context, objx, (IPersistentSet) form);
 
 //	else
 		//throw new UnsupportedOperationException();
@@ -7078,7 +7079,7 @@ static Object macroexpand(Object form) {
 	return form;
 }
 
-private static Expr analyzeSeq(C context, ISeq form, String name) {
+private static Expr analyzeSeq(C context, Compiler.ObjExpr objx, ISeq form, String name) {
 	Object line = lineDeref();
 	Object column = columnDeref();
 	if(RT.meta(form) != null && RT.meta(form).containsKey(RT.LINE_KEY))
@@ -7092,21 +7093,21 @@ private static Expr analyzeSeq(C context, ISeq form, String name) {
 		{
 		Object me = macroexpand1(form);
 		if(me != form)
-			return analyze(context, me, name);
+			return analyze(context, objx, me, name);
 
 		op = RT.first(form);
 		if(op == null)
 			throw new IllegalArgumentException("Can't call nil, form: " + form);
 		IFn inline = isInline(op, RT.count(RT.next(form)));
 		if(inline != null)
-			return analyze(context, preserveTag(form, inline.applyTo(RT.next(form))));
+			return analyze(context, objx, preserveTag(form, inline.applyTo(RT.next(form))));
 		IParser p;
 		if(op.equals(FN))
-			return FnExpr.parse(context, form, name);
+			return FnExpr.parse(context, objx, form, name);
 		else if((p = (IParser) specials.valAt(op)) != null)
-			return p.parse(context, form);
+			return p.parse(context, objx, form);
 		else
-			return InvokeExpr.parse(context, form);
+			return InvokeExpr.parse(context, objx, form);
 		}
 	catch(Throwable e)
 		{
@@ -7171,14 +7172,14 @@ public static Object eval(Object form, boolean freshLoader) {
 					&& !(RT.first(form) instanceof Symbol
 						&& ((Symbol) RT.first(form)).name.startsWith("def"))))
 				{
-				ObjExpr fexpr = (ObjExpr) analyze(C.EXPRESSION, RT.list(FN, PersistentVector.EMPTY, form),
+				ObjExpr fexpr = (ObjExpr) analyze(C.EXPRESSION, null, RT.list(FN, PersistentVector.EMPTY, form),
 													"eval" + RT.nextID());
 				IFn fn = (IFn) fexpr.eval();
 				return fn.invoke();
 				}
 			else
 				{
-				Expr expr = analyze(C.EVAL, form);
+				Expr expr = analyze(C.EVAL, null, form);
 				return expr.eval();
 				}
 			}
@@ -7288,7 +7289,7 @@ static void addParameterAnnotation(Object visitor, IPersistentMap meta, int i){
 		 ADD_ANNOTATIONS.invoke(visitor, meta, i);
 }
 
-private static Expr analyzeSymbol(Symbol sym) {
+private static Expr analyzeSymbol(Compiler.ObjExpr objx, Symbol sym) {
 	Symbol tag = tagOf(sym);
 	if(sym.ns == null) //ns-qualified syms are always Vars
 		{
@@ -7323,7 +7324,7 @@ private static Expr analyzeSymbol(Symbol sym) {
 		if(isMacro(v) != null)
 			throw Util.runtimeException("Can't take value of a macro: " + v);
 		if(RT.booleanCast(RT.get(v.meta(),RT.CONST_KEY)))
-			return analyze(C.EXPRESSION, RT.list(QUOTE, v.get()));
+			return analyze(C.EXPRESSION, objx, RT.list(QUOTE, v.get()));
 		registerVar(v);
 		return new VarExpr(v, tag);
 		}
@@ -7723,7 +7724,7 @@ static void compile1(GeneratorAdapter gen, ObjExpr objx, Object form) {
 			}
 		else
 			{
-			Expr expr = analyze(C.EVAL, form);
+			Expr expr = analyze(C.EVAL, objx, form);
 			objx.keywords = (IPersistentMap) KEYWORDS.deref();
 			objx.vars = (IPersistentMap) VARS.deref();
 			objx.constants = (PersistentVector) CONSTANTS.deref();
@@ -7915,7 +7916,7 @@ static public class NewInstanceExpr extends ObjExpr{
 	}
 
 	static class DeftypeParser implements IParser{
-		public Expr parse(C context, final Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, final Object frm) {
 			ISeq rform = (ISeq) frm;
 			//(deftype* tagname classname [fields] :implements [interfaces] :tag tagname methods*)
 			rform = RT.next(rform);
@@ -7939,7 +7940,7 @@ static public class NewInstanceExpr extends ObjExpr{
 	}
 
 	static class ReifyParser implements IParser{
-	public Expr parse(C context, Object frm) {
+	public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 		//(reify this-name? [interfaces] (method-name [args] body)*)
 		ISeq form = (ISeq) frm;
 		ObjMethod enclosingMethod = (ObjMethod) METHOD.deref();
@@ -7960,7 +7961,7 @@ static public class NewInstanceExpr extends ObjExpr{
 		ObjExpr ret = build(interfaces, null, null, classname, Symbol.intern(classname), null, rform, frm, null);
 		if(frm instanceof IObj && ((IObj) frm).meta() != null)
 			return new MetaExpr(ret, MapExpr
-					.parse(context == C.EVAL ? context : C.EXPRESSION, ((IObj) frm).meta()));
+					.parse(context == C.EVAL ? context : C.EXPRESSION, objx, ((IObj) frm).meta()));
 		else
 			return ret;
 	}
@@ -8550,7 +8551,7 @@ public static class NewInstanceMethod extends ObjMethod{
 			method.methodMeta = RT.meta(name);
 			method.parms = parms;
 			method.argLocals = argLocals;
-			method.body = (new BodyExpr.Parser()).parse(C.RETURN, body);
+			method.body = (new BodyExpr.Parser()).parse(C.RETURN, objx, body);
 			return method;
 			}
 		finally
@@ -9003,10 +9004,10 @@ public static class CaseExpr implements Expr, MaybePrimitiveExpr{
 		//prepared by case macro and presumed correct
 		//case macro binds actual expr in let so expr is always a local,
 		//no need to worry about multiple evaluation
-		public Expr parse(C context, Object frm) {
+		public Expr parse(C context, Compiler.ObjExpr objx, Object frm) {
 			ISeq form = (ISeq) frm;
 			if(context == C.EVAL)
-				return analyze(context, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
+				return analyze(context, objx, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
 			IPersistentVector args = LazilyPersistentVector.create(form.next());
 
 			Object exprForm = args.nth(0);
@@ -9022,7 +9023,7 @@ public static class CaseExpr implements Expr, MaybePrimitiveExpr{
             int low = ((Number)RT.first(keys)).intValue();
             int high = ((Number)RT.nth(keys, RT.count(keys)-1)).intValue();
 
-            LocalBindingExpr testexpr = (LocalBindingExpr) analyze(C.EXPRESSION, exprForm);
+            LocalBindingExpr testexpr = (LocalBindingExpr) analyze(C.EXPRESSION, objx, exprForm);
 			testexpr.shouldClear = false;
 
             SortedMap<Integer,Expr> tests = new TreeMap();
@@ -9044,7 +9045,7 @@ public static class CaseExpr implements Expr, MaybePrimitiveExpr{
                 try {
                     Var.pushThreadBindings(
                             RT.map(CLEAR_PATH, new PathNode(PATHTYPE.PATH,branch)));
-                    thenExpr = analyze(context, RT.second(pair));
+                    thenExpr = analyze(context, objx, RT.second(pair));
                     }
                 finally{
                     Var.popThreadBindings();
@@ -9056,7 +9057,7 @@ public static class CaseExpr implements Expr, MaybePrimitiveExpr{
             try {
                 Var.pushThreadBindings(
                         RT.map(CLEAR_PATH, new PathNode(PATHTYPE.PATH,branch)));
-                defaultExpr = analyze(context, args.nth(3));
+                defaultExpr = analyze(context, objx, args.nth(3));
                 }
             finally{
                 Var.popThreadBindings();
